@@ -35,7 +35,7 @@ handle_cast(stop, State) ->
 handle_cast(_Request, State) ->
   {noreply, normal, State}.
 
-handle_info({'EXIT', Pid, Reason}, State) ->
+handle_info({'EXIT', _Pid, Reason}, State) ->
   io:format("exit reason ~p~n", [Reason]),
   case Reason of
     normal ->
@@ -46,16 +46,15 @@ handle_info({'EXIT', Pid, Reason}, State) ->
       {noreply, State}
   end;
 
-handle_info(timer_msg, #timer_record{timer_ref = TimerRef, duration = TimeInterval, args = Args, mod = Mod, callback = CallBack} = TimerRecord) ->
-%%     io:format("timer msg is ~p~n",[TimerRecord]),
+handle_info(timer_msg, #timer_record{args = Args, mod = Mod, callback = CallBack} = TimerRecord) ->
   Mod:CallBack(Args),
   {noreply, TimerRecord};
 
-handle_info(Info, StateData) ->
+handle_info(_Info, StateData) ->
 %%     io:format("Info ~p, StateData ~p~n",[Info,StateData]),
   {noreply, StateData}.
 
-terminate(_Reason, #timer_record{timer_ref = TimerRef, duration = TimeInterval, args = Args, mod = Mod, callback = CallBack} = TimerRecord) ->
+terminate(_Reason, #timer_record{timer_ref = TimerRef} = TimerRecord) ->
   timer:cancel(TimerRef),
   io:format("process terminated ~p,~p~n", [_Reason, TimerRecord]),
   ok.

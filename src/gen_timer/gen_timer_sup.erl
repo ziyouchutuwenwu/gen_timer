@@ -17,18 +17,25 @@ start_child() ->
 stop_child(Pid) ->
   supervisor:terminate_child(?SERVER, Pid).
 
+
 init([Duration, Args, Mod, CallBack]) ->
-  RestartStrategy = simple_one_for_one,
-  MaxRestarts = 1000,
-  MaxSecondsBetweenRestarts = 3600,
+  MaxRestarts = 2,
+  MaxSecondsBetweenRestarts = 5,
 
-  SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
+  SupervisorFlags = #{
+    strategy => simple_one_for_one,
+    intensity => MaxRestarts,
+    period => MaxSecondsBetweenRestarts
+  },
 
-  Restart = permanent,
-  Shutdown = 2000,
-  Type = worker,
+  ChildSpec = #{
+    id => gen_timer,
+    start => {gen_timer, start_link, [Duration, Args, Mod, CallBack]},
+    restart => permanent,
+    shutdown => 2000,
+    type => worker,
+    modules => [gen_timer]
+  },
 
-  Child = {gen_timer, {gen_timer, start_link, [Duration, Args, Mod, CallBack]},
-    Restart, Shutdown, Type, [gen_timer]},
-  Children = [Child],
-  {ok, {SupFlags, Children}}.
+  Children = [ChildSpec],
+  {ok, {SupervisorFlags, Children}}.

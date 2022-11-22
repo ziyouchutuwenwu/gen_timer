@@ -1,63 +1,40 @@
 -module(gen_timer).
 
--behaviour(gen_server).
--record(timer_record, {timer_ref, duration, args, mod, callback}).
+-export([start_loop_timer/4, start_single_timer/4, init/5]).
+-export([timer_loop/4, timer_wait/3]).
 
--export([start_link/4, start/4, stop/1]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+start_loop_timer(Druation, Mod, Fun, Args) ->
+  Pid = spawn_link(?MODULE, init, [true, Druation, Mod, Fun, Args]),
+  {ok, Pid}.
 
-start_link(Duration, Args, Mod, CallBack) ->
-  gen_server:start_link(?MODULE, [Duration, Args, Mod, CallBack], []).
+start_single_timer(Druation, Mod, Fun, Args) ->
+  spawn_link(?MODULE, init, [false, Druation, Mod, Fun, Args]).
 
-%用于单独启动
-start(Duration, Args, Mod, CallBack) ->
-  gen_server:start_link(?MODULE, [Duration, Args, Mod, CallBack], []).
+init(ShouldLoop, Druation, Mod, Fun, Args)->
+  erlang:start_timer(Druation, self(), {on_timer}),
+  case ShouldLoop of
+    true ->
+      timer_loop(Druation, Mod, Fun, Args);
+    _ ->
+      timer_wait(Mod, Fun, Args)
+  end.
 
-stop(Pid) ->
-  gen_server:cast(Pid, stop),
-  ok.
+timer_loop(Druation, Mod, Fun, Args) ->
+  receive
+    {timeout, TimerRef, {on_timer}}->
+      erlang:cancel_timer(TimerRef),
+      erlang:start_timer(Druation, self(), {on_timer}),
+      erlang:apply(Mod, Fun, [Args]),
+      timer_loop(Druation, Mod, Fun, Args);
+    Other ->
+      io:format("will break loop, got other msg~p~n",[Other])
+  end.
 
-init([Duration, Args, Mod, CallBack]) ->
-  process_flag(trap_exit, true),
-
-  TimeInterval = round(Duration),
-  {ok, TimerRef} = timer:send_interval(TimeInterval * 1000, self(), timer_msg),
-  TimerRecord = #timer_record{timer_ref = TimerRef, duration = TimeInterval, args = Args, mod = Mod, callback = CallBack},
-  {ok, TimerRecord, 0}.
-
-%% callbacks
-handle_call(Msg, _From, State) ->
-  {reply, {ok, Msg}, State}.
-
-handle_cast(stop, State) ->
-  {stop, normal, State};
-
-handle_cast(_Request, State) ->
-  {noreply, normal, State}.
-
-handle_info({'EXIT', _Pid, Reason}, State) ->
-  io:format("exit reason ~p~n", [Reason]),
-  case Reason of
-    normal ->
-      io:format("normal exit trapped~n"),
-      {stop, normal, State};
-    other ->
-      io:format("other exit trapped~n"),
-      {noreply, State}
-  end;
-
-handle_info(timer_msg, #timer_record{args = Args, mod = Mod, callback = CallBack} = TimerRecord) ->
-  Mod:CallBack(Args),
-  {noreply, TimerRecord};
-
-handle_info(_Info, StateData) ->
-%%     io:format("Info ~p, StateData ~p~n",[Info,StateData]),
-  {noreply, StateData}.
-
-terminate(_Reason, #timer_record{timer_ref = TimerRef} = TimerRecord) ->
-  timer:cancel(TimerRef),
-  io:format("process terminated ~p,~p~n", [_Reason, TimerRecord]),
-  ok.
-
-code_change(_OldVsn, State, _Extra) ->
-  {ok, State}.
+timer_wait(Mod, Fun, Args) ->
+  receive
+    {timeout, TimerRef, {on_timer}}->
+      erlang:cancel_timer(TimerRef),
+      erlang:apply(Mod, Fun, [Args]);
+    Other ->
+      io:format("will break loop, got other msg~p~n",[Other])
+  end.
